@@ -24,13 +24,18 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Si estamos en producción detrás de un proxy (Heroku/Render), confiar en el proxy
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
 // Configurar express-session
 app.use(session({
   secret: process.env.SESSION_SECRET || 'tu_session_secret_seguro',
   resave: false,
   saveUninitialized: true,
   cookie: { 
-    secure: false, // Cambiar a true si usas HTTPS
+    secure: process.env.NODE_ENV === 'production', // true solo en producción con HTTPS
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
     sameSite: 'lax', // Importante para OAuth
