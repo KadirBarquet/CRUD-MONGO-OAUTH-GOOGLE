@@ -3,7 +3,14 @@ import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import Usuario from '../models/Usuario.js';
 import dotenv from 'dotenv';
 
-dotenv.config(); // Cargar variables de entorno
+dotenv.config();
+
+// CRÍTICO: callbackURL debe ser absoluta en producción
+const CALLBACK_URL = process.env.NODE_ENV === 'production'
+  ? 'https://crud-mongo-oauth-google.onrender.com/auth/google/callback'
+  : 'http://localhost:5000/auth/google/callback';
+
+console.log('OAuth Callback URL:', CALLBACK_URL);
 
 // Configurar estrategia de Google
 passport.use(
@@ -11,18 +18,18 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: '/auth/google/callback',
+      callbackURL: CALLBACK_URL,
+      proxy: true, // IMPORTANTE: necesario para Render/Heroku
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        // Extraer datos del perfil de Google
         const { id, displayName, emails, photos } = profile;
 
         // Buscar si el usuario ya existe
         let usuario = await Usuario.findOne({ googleId: id });
 
         if (usuario) {
-          // Usuario ya existe, retornarlo
+          console.log('✅ Usuario existente encontrado:', usuario.correo);
           return done(null, usuario);
         }
 
@@ -33,13 +40,13 @@ passport.use(
           googleId: id,
           fotoPerfil: photos[0]?.value || null,
           tipoAutenticacion: 'google',
-          // Sin contraseña porque autentica con Google
         });
 
         await usuario.save();
+        console.log('✅ Nuevo usuario creado:', usuario.correo);
         return done(null, usuario);
       } catch (err) {
-        console.error('Error en estrategia Google:', err.message);
+        console.error('❌ Error en estrategia Google:', err.message);
         return done(err);
       }
     }

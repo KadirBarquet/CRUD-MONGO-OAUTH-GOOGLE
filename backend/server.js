@@ -29,16 +29,17 @@ if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Configurar express-session
+// Configurar express-session (línea 30 aprox)
 app.use(session({
   secret: process.env.SESSION_SECRET || 'tu_session_secret_seguro',
   resave: false,
-  saveUninitialized: true,
+  saveUninitialized: false, // Cambiar de true a false
   cookie: { 
-    secure: process.env.NODE_ENV === 'production', // true solo en producción con HTTPS
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
-    sameSite: 'lax', // Importante para OAuth
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // CRÍTICO
+    domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
   },
 }));
 
