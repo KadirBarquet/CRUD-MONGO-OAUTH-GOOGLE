@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-const API_URL = 'http://localhost:5000';
+const apiUrl = process.env.REACT_APP_API_URL;
+const googleAuthUrl = `${apiUrl}/auth/google`;
 
 // Componente de Login
 function LoginPage({ onNavigate }) {
@@ -46,7 +47,7 @@ function LoginPage({ onNavigate }) {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${API_URL}/auth/google`;
+    window.location.href = googleAuthUrl
   };
 
   return (
