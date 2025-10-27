@@ -4,6 +4,8 @@ import './App.css';
 const apiUrl = process.env.REACT_APP_API_URL;
 const googleAuthUrl = `${apiUrl}/auth/google`;
 
+console.log('API URL:', apiUrl);
+
 // Componente de Login
 function LoginPage({ onNavigate }) {
   const [formData, setFormData] = useState({ correo: '', contrasenia: '' });
@@ -23,6 +25,8 @@ function LoginPage({ onNavigate }) {
     setError('');
 
     try {
+      console.log('📤 Enviando login a:', `${apiUrl}/login`);
+      
       const response = await fetch(`${apiUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -30,6 +34,7 @@ function LoginPage({ onNavigate }) {
       });
 
       const data = await response.json();
+      console.log('📥 Respuesta login:', data);
 
       if (!response.ok) {
         setError(data.error || 'Error al iniciar sesión');
@@ -41,13 +46,15 @@ function LoginPage({ onNavigate }) {
       localStorage.setItem('usuario', JSON.stringify(data.usuario));
       onNavigate('crud', data.usuario);
     } catch (err) {
+      console.error('❌ Error en login:', err);
       setError('Error al conectar con el servidor');
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = googleAuthUrl
+    console.log('🔐 Iniciando OAuth con:', googleAuthUrl);
+    window.location.href = googleAuthUrl;
   };
 
   return (
@@ -106,16 +113,16 @@ function LoginPage({ onNavigate }) {
           type="button"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" className="google-icon">
-            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
           </svg>
           Iniciar con Google
         </button>
 
         <p className="auth-link">
-          ¿No tienes cuenta? <a href="/registro">Regístrate aquí</a>
+          ¿No tienes cuenta? <a href="/?page=registro">Regístrate aquí</a>
         </p>
       </div>
     </div>
@@ -250,25 +257,41 @@ function CRUDPage({ usuario, onLogout }) {
 
   const token = localStorage.getItem('token');
 
-  // Definir cargarUsuarios ANTES de useEffect
   const cargarUsuarios = async () => {
     try {
+      console.log('📋 Cargando usuarios...');
+      console.log('🔑 Token:', token ? 'Presente' : 'No presente');
+      console.log('🌐 URL:', `${apiUrl}/usuarios`);
+
       const response = await fetch(`${apiUrl}/usuarios`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        method: 'GET',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
 
-      if (!response.ok) throw new Error('Error al cargar usuarios');
+      console.log('📡 Status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Error response:', errorData);
+        throw new Error(errorData.error || 'Error al cargar usuarios');
+      }
 
       const data = await response.json();
+      console.log('✅ Usuarios recibidos:', data);
+      
       setUsuarios(data.usuarios);
       setLoading(false);
+      setError('');
     } catch (err) {
+      console.error('❌ Error en cargarUsuarios:', err);
       setError(err.message);
       setLoading(false);
     }
   };
 
-  // useEffect SIN advertencias
   useEffect(() => {
     cargarUsuarios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -320,7 +343,6 @@ function CRUDPage({ usuario, onLogout }) {
 
       const method = usuarioEditar ? 'PUT' : 'POST';
 
-      // Si es edición y no cambió la contraseña, no la envía
       const dataEnviar = usuarioEditar && !formData.contrasenia
         ? { nombre: formData.nombre, correo: formData.correo }
         : { nombre: formData.nombre, correo: formData.correo, contrasenia: formData.contrasenia };
@@ -366,10 +388,7 @@ function CRUDPage({ usuario, onLogout }) {
         {error && <div className="alert alert-error">{error}</div>}
 
         <div className="action-bar">
-          <button
-            onClick={handleCrear}
-            className="btn btn-success"
-          >
+          <button onClick={handleCrear} className="btn btn-success">
             + Crear Usuario
           </button>
         </div>
@@ -446,6 +465,7 @@ function CRUDPage({ usuario, onLogout }) {
               <div className="detalle-info">
                 <p><strong>Nombre:</strong> {usuarioDetalle.nombre}</p>
                 <p><strong>Correo:</strong> {usuarioDetalle.correo}</p>
+                <p><strong>Tipo:</strong> {usuarioDetalle.tipoAutenticacion === 'google' ? 'Google OAuth' : 'Local'}</p>
                 <p><strong>Fecha Registro:</strong> {new Date(usuarioDetalle.fechaRegistro).toLocaleDateString()}</p>
               </div>
               <button
@@ -459,7 +479,7 @@ function CRUDPage({ usuario, onLogout }) {
         )}
 
         <div className="table-container">
-          <h2>Usuarios Registrados</h2>
+          <h2>Usuarios Registrados ({usuarios.length})</h2>
           {loading ? (
             <p>Cargando...</p>
           ) : usuarios.length === 0 ? (
@@ -471,6 +491,7 @@ function CRUDPage({ usuario, onLogout }) {
                   <tr className="table-header">
                     <th>Nombre</th>
                     <th>Correo</th>
+                    <th>Tipo</th>
                     <th>Fecha Registro</th>
                     <th>Acciones</th>
                   </tr>
@@ -478,8 +499,35 @@ function CRUDPage({ usuario, onLogout }) {
                 <tbody>
                   {usuarios.map(usr => (
                     <tr key={usr._id} className="table-row">
-                      <td>{usr.nombre}</td>
+                      <td>
+                        {usr.fotoPerfil && (
+                          <img 
+                            src={usr.fotoPerfil} 
+                            alt={usr.nombre}
+                            style={{
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              marginRight: '8px',
+                              verticalAlign: 'middle'
+                            }}
+                          />
+                        )}
+                        {usr.nombre}
+                      </td>
                       <td>{usr.correo}</td>
+                      <td>
+                        <span style={{
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '11px',
+                          fontWeight: 'bold',
+                          backgroundColor: usr.tipoAutenticacion === 'google' ? '#e3f2fd' : '#f3e5f5',
+                          color: usr.tipoAutenticacion === 'google' ? '#1976d2' : '#7b1fa2'
+                        }}>
+                          {usr.tipoAutenticacion === 'google' ? '🔐 Google' : '📧 Local'}
+                        </span>
+                      </td>
                       <td>{new Date(usr.fechaRegistro).toLocaleDateString()}</td>
                       <td>
                         <button
@@ -519,33 +567,60 @@ export default function App() {
   const [usuario, setUsuario] = useState(null);
 
   useEffect(() => {
+    console.log('🚀 App montada, verificando autenticación...');
+    
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     const usuarioParam = params.get('usuario');
+    const pageParam = params.get('page');
 
+    console.log('📦 Parámetros URL:', { token: !!token, usuario: !!usuarioParam, page: pageParam });
+
+    // Caso 1: Callback de Google OAuth
     if (token && usuarioParam) {
-      localStorage.setItem('token', token);
-      const usr = JSON.parse(decodeURIComponent(usuarioParam));
-      localStorage.setItem('usuario', JSON.stringify(usr));
-      setUsuario(usr);
-      setPage('crud');
-      window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-      const storedToken = localStorage.getItem('token');
-      const storedUsuario = localStorage.getItem('usuario');
-
-      if (storedToken && storedUsuario) {
-        setUsuario(JSON.parse(storedUsuario));
+      try {
+        console.log('✅ Autenticación OAuth detectada');
+        localStorage.setItem('token', token);
+        const usr = JSON.parse(decodeURIComponent(usuarioParam));
+        localStorage.setItem('usuario', JSON.stringify(usr));
+        setUsuario(usr);
         setPage('crud');
+        
+        window.history.replaceState({}, document.title, '/');
+        console.log('✅ Usuario autenticado con Google:', usr.nombre);
+      } catch (err) {
+        console.error('❌ Error al procesar callback OAuth:', err);
       }
+      return;
     }
 
-    const path = window.location.pathname;
-    if (path === '/registro') setPage('registro');
-    else if (path === '/') setPage('login');
+    // Caso 2: Ya tiene sesión guardada
+    const storedToken = localStorage.getItem('token');
+    const storedUsuario = localStorage.getItem('usuario');
+
+    if (storedToken && storedUsuario) {
+      try {
+        const usr = JSON.parse(storedUsuario);
+        setUsuario(usr);
+        setPage('crud');
+        console.log('✅ Sesión recuperada:', usr.nombre);
+      } catch (err) {
+        console.error('❌ Error al recuperar sesión:', err);
+        localStorage.clear();
+      }
+      return;
+    }
+
+    // Caso 3: Navegación manual
+    if (pageParam === 'registro') {
+      setPage('registro');
+    } else {
+      setPage('login');
+    }
   }, []);
 
   const handleLogout = () => {
+    console.log('👋 Cerrando sesión...');
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
     setUsuario(null);
@@ -554,10 +629,18 @@ export default function App() {
   };
 
   const handleNavigate = (newPage, usr = null) => {
+    console.log('🔄 Navegando a:', newPage);
     setPage(newPage);
-    if (usr) setUsuario(usr);
-    if (newPage === 'login') window.history.pushState({}, document.title, '/');
-    if (newPage === 'registro') window.history.pushState({}, document.title, '/registro');
+    if (usr) {
+      setUsuario(usr);
+      console.log('✅ Usuario establecido:', usr.nombre);
+    }
+    
+    if (newPage === 'login') {
+      window.history.pushState({}, document.title, '/');
+    } else if (newPage === 'registro') {
+      window.history.pushState({}, document.title, '/?page=registro');
+    }
   };
 
   return (

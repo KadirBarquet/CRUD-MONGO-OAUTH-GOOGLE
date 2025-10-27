@@ -43,10 +43,10 @@ passport.use(
         });
 
         await usuario.save();
-        console.log('✅ Nuevo usuario creado:', usuario.correo);
+        console.log('Nuevo usuario creado:', usuario.correo);
         return done(null, usuario);
       } catch (err) {
-        console.error('❌ Error en estrategia Google:', err.message);
+        console.error('Error en estrategia Google:', err.message);
         return done(err);
       }
     }

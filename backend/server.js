@@ -4,65 +4,89 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import session from 'express-session';
 import passport from 'passport';
-import './config/passport.js'; // Importar configuración de Passport
+import './config/passport.js';
 import conectarMongoDB from './db.js';
 import Usuario from './models/Usuario.js';
 import { verificarToken } from './middleware/auth.js';
-import { estaAutenticado } from './middleware/authGoogle.js';
 
-dotenv.config(); // Cargar variables de entorno
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 // ==================== MIDDLEWARE ====================
+
+// CORS MEJORADO - Acepta múltiples orígenes
+const allowedOrigins = [
+  FRONTEND_URL,
+  'http://localhost:3000',
+  'https://crud-mongo-oauth-google-5vhyvqtxe-kadirbarquets-projects.vercel.app',
+  /\.vercel\.app$/, // Cualquier subdominio de Vercel
+];
+
 app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true, // Importante para enviar cookies
+  origin: function(origin, callback) {
+    // Permitir requests sin origin (como Postman, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si el origin está en la lista
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return allowedOrigin === origin;
+      }
+      // Si es RegExp
+      return allowedOrigin.test(origin);
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log('Origin no permitido:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Si estamos en producción detrás de un proxy (Heroku/Render), confiar en el proxy
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// Configurar express-session (línea 30 aprox)
 app.use(session({
   secret: process.env.SESSION_SECRET || 'tu_session_secret_seguro',
   resave: false,
-  saveUninitialized: false, // Cambiar de true a false
+  saveUninitialized: false,
   cookie: { 
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 7 * 24 * 60 * 60 * 1000,
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // CRÍTICO
-    domain: process.env.NODE_ENV === 'production' ? '.onrender.com' : undefined,
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
   },
 }));
 
-// Inicializar Passport
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Conectar a MongoDB
 conectarMongoDB();
 
 // ==================== RUTAS PÚBLICAS ====================
 
-// GET / - Raíz
 app.get('/', (req, res) => {
   res.json({
     mensaje: 'Servidor Express funcionando!',
     estado: 'Backend listo para MongoDB + JWT + OAuth',
+    timestamp: new Date().toISOString(),
   });
 });
 
 // ==================== AUTENTICACIÓN LOCAL ====================
 
-// POST /registro - Registrar nuevo usuario
 app.post('/registro', async (req, res) => {
   try {
     if (!req.body || typeof req.body !== 'object') {
@@ -115,9 +139,7 @@ app.post('/registro', async (req, res) => {
     console.error('Error en POST /registro:', err.message);
 
     if (err.code === 11000) {
-      return res
-        .status(400)
-        .json({ error: 'El correo ya está registrado' });
+      return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
@@ -131,31 +153,24 @@ app.post('/registro', async (req, res) => {
   }
 });
 
-// POST /login - Autenticar usuario y devolver JWT
 app.post('/login', async (req, res) => {
   try {
     const { correo, contrasenia } = req.body;
 
     if (!correo || !contrasenia) {
-      return res
-        .status(400)
-        .json({ error: 'Correo y contraseña son requeridos' });
+      return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
     }
 
     const usuario = await Usuario.findOne({ correo }).select('+contrasenia');
 
     if (!usuario) {
-      return res.status(401).json({
-        error: 'Correo o contraseña incorrectos',
-      });
+      return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
     }
 
     const esValida = await usuario.compararContrasenia(contrasenia);
 
     if (!esValida) {
-      return res.status(401).json({
-        error: 'Correo o contraseña incorrectos',
-      });
+      return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
     }
 
     const token = jwt.sign(
@@ -184,7 +199,6 @@ app.post('/login', async (req, res) => {
 
 // ==================== RUTAS OAUTH - GOOGLE ====================
 
-// GET /auth/google - Iniciar autenticación con Google
 app.get(
   '/auth/google',
   passport.authenticate('google', {
@@ -192,17 +206,14 @@ app.get(
   })
 );
 
-// GET /auth/google/callback - Callback de Google
 app.get(
   '/auth/google/callback',
   passport.authenticate('google', {
-    failureRedirect: `${FRONTEND_URL}/login?error=auth_failed`,
+    failureRedirect: `${FRONTEND_URL}/?error=auth_failed`,
   }),
   (req, res) => {
-    // Usuario autenticado exitosamente
     const usuario = req.user;
 
-    // Generar JWT
     const token = jwt.sign(
       {
         usuarioId: usuario._id,
@@ -212,7 +223,6 @@ app.get(
       { expiresIn: '7d' }
     );
 
-    // Redirigir al frontend React con el token en query params
     const usuarioData = encodeURIComponent(
       JSON.stringify({
         _id: usuario._id,
@@ -222,13 +232,11 @@ app.get(
       })
     );
 
-    res.redirect(
-      `${FRONTEND_URL}/dashboard?token=${token}&usuario=${usuarioData}`
-    );
+    // CORREGIDO: Redirigir a la raíz con parámetros
+    res.redirect(`${FRONTEND_URL}/?token=${token}&usuario=${usuarioData}`);
   }
 );
 
-// GET /logout - Cerrar sesión
 app.get('/logout', (req, res) => {
   req.logout((err) => {
     if (err) {
@@ -240,12 +248,9 @@ app.get('/logout', (req, res) => {
 
 // ==================== RUTAS PROTEGIDAS ====================
 
-// GET /perfil - Obtener perfil del usuario autenticado
 app.get('/perfil', verificarToken, async (req, res) => {
   try {
-    const usuario = await Usuario.findById(req.usuarioId).select(
-      '-contrasenia'
-    );
+    const usuario = await Usuario.findById(req.usuarioId).select('-contrasenia');
 
     if (!usuario) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -261,12 +266,16 @@ app.get('/perfil', verificarToken, async (req, res) => {
   }
 });
 
-// GET /usuarios - Listar todos (PROTEGIDO)
 app.get('/usuarios', verificarToken, async (req, res) => {
   try {
+    console.log('Solicitando lista de usuarios...');
+    console.log('Usuario autenticado:', req.usuarioId);
+
     const usuarios = await Usuario.find().select(
-      'nombre correo fotoPerfil fechaRegistro _id'
+      'nombre correo fotoPerfil fechaRegistro _id tipoAutenticacion'
     );
+
+    console.log(`Se encontraron ${usuarios.length} usuarios`);
 
     res.json({
       total: usuarios.length,
@@ -278,7 +287,6 @@ app.get('/usuarios', verificarToken, async (req, res) => {
   }
 });
 
-// GET /usuarios/:id - Obtener usuario por ID (PROTEGIDO)
 app.get('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -303,7 +311,6 @@ app.get('/usuarios/:id', verificarToken, async (req, res) => {
   }
 });
 
-// PUT /usuarios/:id - Actualizar usuario (PROTEGIDO)
 app.put('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -321,7 +328,6 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
       return res.status(400).json({ error: 'El correo debe ser texto' });
     }
 
-    // Validar contraseña si se proporciona
     if (contrasenia && typeof contrasenia !== 'string') {
       return res.status(400).json({ error: 'La contraseña debe ser texto' });
     }
@@ -332,7 +338,6 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
       });
     }
 
-    // Preparar datos a actualizar
     const dataActualizar = { nombre, correo };
     if (contrasenia) {
       dataActualizar.contrasenia = contrasenia;
@@ -356,9 +361,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
     console.error('Error en PUT /usuarios/:id:', err.message);
 
     if (err.code === 11000) {
-      return res
-        .status(400)
-        .json({ error: 'El correo ya está registrado' });
+      return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
@@ -372,7 +375,6 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
   }
 });
 
-// POST /usuarios - Crear nuevo usuario (PROTEGIDO)
 app.post('/usuarios', verificarToken, async (req, res) => {
   try {
     const { nombre, correo, contrasenia } = req.body;
@@ -419,9 +421,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
     console.error('Error en POST /usuarios:', err.message);
 
     if (err.code === 11000) {
-      return res
-        .status(400)
-        .json({ error: 'El correo ya está registrado' });
+      return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
@@ -435,7 +435,6 @@ app.post('/usuarios', verificarToken, async (req, res) => {
   }
 });
 
-// DELETE /usuarios/:id - Eliminar usuario (PROTEGIDO)
 app.delete('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -470,9 +469,10 @@ app.listen(PORT, () => {
 ==============================================
 Servidor corriendo en http://localhost:${PORT}
 ==============================================
-Autenticación JWT activada
-OAuth Google configurado
-Backend listo con MongoDB + Seguridad
+- Autenticación JWT activada
+- OAuth Google configurado
+- Backend listo con MongoDB + Seguridad
+- CORS configurado para: ${FRONTEND_URL}
 ==============================================
   `);
 });
