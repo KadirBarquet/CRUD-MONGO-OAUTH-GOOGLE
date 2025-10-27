@@ -23,7 +23,7 @@ function LoginPage({ onNavigate }) {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/login`, {
+      const response = await fetch(`${apiUrl}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -143,7 +143,7 @@ function RegistroPage({ onNavigate }) {
     setExito('');
 
     try {
-      const response = await fetch(`${API_URL}/registro`, {
+      const response = await fetch(`${apiUrl}/registro`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
@@ -253,7 +253,7 @@ function CRUDPage({ usuario, onLogout }) {
   // Definir cargarUsuarios ANTES de useEffect
   const cargarUsuarios = async () => {
     try {
-      const response = await fetch(`${API_URL}/usuarios`, {
+      const response = await fetch(`${apiUrl}/usuarios`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -296,7 +296,7 @@ function CRUDPage({ usuario, onLogout }) {
     if (!window.confirm('¿Estás seguro de que quieres eliminar este usuario?')) return;
 
     try {
-      const response = await fetch(`${API_URL}/usuarios/${id}`, {
+      const response = await fetch(`${apiUrl}/usuarios/${id}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -315,8 +315,8 @@ function CRUDPage({ usuario, onLogout }) {
 
     try {
       const url = usuarioEditar
-        ? `${API_URL}/usuarios/${usuarioEditar._id}`
-        : `${API_URL}/usuarios`;
+        ? `${apiUrl}/usuarios/${usuarioEditar._id}`
+        : `${apiUrl}/usuarios`;
 
       const method = usuarioEditar ? 'PUT' : 'POST';
 
