@@ -4,7 +4,8 @@ import './App.css';
 const apiUrl = process.env.REACT_APP_API_URL;
 const googleAuthUrl = `${apiUrl}/auth/google`;
 
-console.log('API URL:', apiUrl);
+console.log('🌐 API URL configurada:', apiUrl);
+console.log('🔐 Google Auth URL:', googleAuthUrl);
 
 // Componente de Login
 function LoginPage({ onNavigate }) {
@@ -12,6 +13,24 @@ function LoginPage({ onNavigate }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+
+  // Verificar si hay error en la URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const urlError = params.get('error');
+    
+    if (urlError) {
+      const errorMessages = {
+        'auth_failed': '❌ Error al autenticar con Google. Intenta nuevamente.',
+        'no_user': '❌ No se pudo obtener la información del usuario.',
+        'callback_error': '❌ Error en el proceso de autenticación.'
+      };
+      setError(errorMessages[urlError] || '❌ Error desconocido en la autenticación');
+      
+      // Limpiar la URL
+      window.history.replaceState({}, document.title, '/');
+    }
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -44,6 +63,7 @@ function LoginPage({ onNavigate }) {
 
       localStorage.setItem('token', data.token);
       localStorage.setItem('usuario', JSON.stringify(data.usuario));
+      console.log('✅ Login exitoso, navegando al CRUD');
       onNavigate('crud', data.usuario);
     } catch (err) {
       console.error('❌ Error en login:', err);
@@ -54,6 +74,7 @@ function LoginPage({ onNavigate }) {
 
   const handleGoogleLogin = () => {
     console.log('🔐 Iniciando OAuth con:', googleAuthUrl);
+    // Redirigir a Google OAuth
     window.location.href = googleAuthUrl;
   };
 
@@ -80,7 +101,7 @@ function LoginPage({ onNavigate }) {
 
           <div className="form-group">
             <label className="form-label">Contraseña:</label>
-            <div className="password-input-wrapper">
+            <div style={{ position: 'relative' }}>
               <input
                 type={showPassword ? 'text' : 'password'}
                 name="contrasenia"
@@ -89,11 +110,21 @@ function LoginPage({ onNavigate }) {
                 placeholder="Mínimo 8 caracteres"
                 className="form-input"
                 required
+                style={{ paddingRight: '40px' }}
               />
               <button
                 type="button"
-                className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '18px'
+                }}
               >
                 {showPassword ? '👁️' : '👁️‍🗨️'}
               </button>
@@ -111,6 +142,7 @@ function LoginPage({ onNavigate }) {
           onClick={handleGoogleLogin}
           className="btn btn-google"
           type="button"
+          disabled={loading}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" className="google-icon">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -150,6 +182,8 @@ function RegistroPage({ onNavigate }) {
     setExito('');
 
     try {
+      console.log('📤 Enviando registro a:', `${apiUrl}/registro`);
+      
       const response = await fetch(`${apiUrl}/registro`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,6 +191,7 @@ function RegistroPage({ onNavigate }) {
       });
 
       const data = await response.json();
+      console.log('📥 Respuesta registro:', data);
 
       if (!response.ok) {
         setError(data.error || 'Error al registrar');
@@ -169,6 +204,7 @@ function RegistroPage({ onNavigate }) {
         onNavigate('login');
       }, 2000);
     } catch (err) {
+      console.error('❌ Error en registro:', err);
       setError('Error al conectar con el servidor');
       setLoading(false);
     }
@@ -211,7 +247,7 @@ function RegistroPage({ onNavigate }) {
 
           <div className="form-group">
             <label className="form-label">Contraseña:</label>
-            <div className="password-input-wrapper">
+            <div style={{ position: 'relative' }}>
               <input
                 type={showPassword ? 'text' : 'password'}
                 name="contrasenia"
@@ -220,11 +256,21 @@ function RegistroPage({ onNavigate }) {
                 placeholder="Mínimo 8 caracteres"
                 className="form-input"
                 required
+                style={{ paddingRight: '40px' }}
               />
               <button
                 type="button"
-                className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '10px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontSize: '18px'
+                }}
               >
                 {showPassword ? '👁️' : '👁️‍🗨️'}
               </button>
@@ -280,7 +326,7 @@ function CRUDPage({ usuario, onLogout }) {
       }
 
       const data = await response.json();
-      console.log('✅ Usuarios recibidos:', data);
+      console.log('✅ Usuarios recibidos:', data.total, 'usuarios');
       
       setUsuarios(data.usuarios);
       setLoading(false);
@@ -421,9 +467,9 @@ function CRUDPage({ usuario, onLogout }) {
                 <div className="form-group">
                   <label className="form-label">
                     Contraseña:
-                    {usuarioEditar && <span className="optional-text"> (opcional)</span>}
+                    {usuarioEditar && <span style={{ fontSize: '12px', color: '#999' }}> (opcional)</span>}
                   </label>
-                  <div className="password-input-wrapper">
+                  <div style={{ position: 'relative' }}>
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={formData.contrasenia}
@@ -431,11 +477,21 @@ function CRUDPage({ usuario, onLogout }) {
                       placeholder={usuarioEditar ? 'Dejar vacío para no cambiar' : 'Mínimo 8 caracteres'}
                       className="form-input"
                       required={!usuarioEditar}
+                      style={{ paddingRight: '40px' }}
                     />
                     <button
                       type="button"
-                      className="password-toggle"
                       onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '10px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '18px'
+                      }}
                     >
                       {showPassword ? '👁️' : '👁️‍🗨️'}
                     </button>
@@ -561,76 +617,129 @@ function CRUDPage({ usuario, onLogout }) {
   );
 }
 
-// App principal
+// App principal - CORREGIDO
 export default function App() {
-  const [page, setPage] = useState('login');
+  const [page, setPage] = useState('loading');
   const [usuario, setUsuario] = useState(null);
 
   useEffect(() => {
-    console.log('🚀 App montada, verificando autenticación...');
+    console.log('==============================================');
+    console.log('🚀 APP INICIADA - Verificando autenticación');
+    console.log('==============================================');
     
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     const usuarioParam = params.get('usuario');
     const pageParam = params.get('page');
+    const errorParam = params.get('error');
 
-    console.log('📦 Parámetros URL:', { token: !!token, usuario: !!usuarioParam, page: pageParam });
+    console.log('📦 Parámetros URL detectados:');
+    console.log('  - token:', token ? '✅ Presente' : '❌ No presente');
+    console.log('  - usuario:', usuarioParam ? '✅ Presente' : '❌ No presente');
+    console.log('  - page:', pageParam || 'No especificado');
+    console.log('  - error:', errorParam || 'No hay error');
 
-    // Caso 1: Callback de Google OAuth
+    // CASO 1: Callback de Google OAuth
     if (token && usuarioParam) {
       try {
-        console.log('✅ Autenticación OAuth detectada');
+        console.log('\n🔐 PROCESANDO CALLBACK DE GOOGLE OAUTH');
+        console.log('---------------------------------------------');
+        
+        // Guardar token
         localStorage.setItem('token', token);
+        console.log('✅ Token guardado en localStorage');
+        
+        // Decodificar y guardar usuario
         const usr = JSON.parse(decodeURIComponent(usuarioParam));
         localStorage.setItem('usuario', JSON.stringify(usr));
+        console.log('✅ Usuario guardado:', usr.nombre, '(' + usr.correo + ')');
+        console.log('✅ Tipo de autenticación:', usr.tipoAutenticacion);
+        
+        // Establecer estado
         setUsuario(usr);
         setPage('crud');
         
+        // Limpiar URL para evitar reautenticación
         window.history.replaceState({}, document.title, '/');
-        console.log('✅ Usuario autenticado con Google:', usr.nombre);
+        console.log('✅ URL limpiada');
+        
+        console.log('\n✅ AUTENTICACIÓN OAUTH EXITOSA');
+        console.log('   Redirigiendo al CRUD...');
+        console.log('---------------------------------------------\n');
+        
+        return; // IMPORTANTE: Salir aquí
       } catch (err) {
-        console.error('❌ Error al procesar callback OAuth:', err);
+        console.error('\n❌ ERROR AL PROCESAR CALLBACK OAUTH:', err);
+        console.error('---------------------------------------------');
+        console.error('Detalles del error:', err.message);
+        console.error('Stack:', err.stack);
+        localStorage.clear();
+        setPage('login');
+        return;
       }
+    }
+
+    // CASO 2: Error en autenticación
+    if (errorParam) {
+      console.log('\n❌ ERROR EN AUTENTICACIÓN:', errorParam);
+      setPage('login');
       return;
     }
 
-    // Caso 2: Ya tiene sesión guardada
+    // CASO 3: Ya tiene sesión guardada
     const storedToken = localStorage.getItem('token');
     const storedUsuario = localStorage.getItem('usuario');
+
+    console.log('\n🔍 Verificando sesión guardada:');
+    console.log('  - Token en localStorage:', storedToken ? '✅ Presente' : '❌ No presente');
+    console.log('  - Usuario en localStorage:', storedUsuario ? '✅ Presente' : '❌ No presente');
 
     if (storedToken && storedUsuario) {
       try {
         const usr = JSON.parse(storedUsuario);
         setUsuario(usr);
         setPage('crud');
-        console.log('✅ Sesión recuperada:', usr.nombre);
+        console.log('✅ Sesión recuperada exitosamente:', usr.nombre);
+        console.log('   Redirigiendo al CRUD...\n');
+        return;
       } catch (err) {
-        console.error('❌ Error al recuperar sesión:', err);
+        console.error('❌ Error al parsear usuario guardado:', err);
         localStorage.clear();
       }
-      return;
     }
 
-    // Caso 3: Navegación manual
+    // CASO 4: Navegación manual (registro o login)
+    console.log('\n🔄 No hay sesión activa');
     if (pageParam === 'registro') {
+      console.log('   Mostrando página de REGISTRO\n');
       setPage('registro');
     } else {
+      console.log('   Mostrando página de LOGIN\n');
       setPage('login');
     }
+    console.log('==============================================\n');
   }, []);
 
   const handleLogout = () => {
-    console.log('👋 Cerrando sesión...');
+    console.log('\n👋 CERRANDO SESIÓN');
+    console.log('---------------------------------------------');
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
+    console.log('✅ Token eliminado');
+    console.log('✅ Usuario eliminado');
     setUsuario(null);
     setPage('login');
     window.history.pushState({}, document.title, '/');
+    console.log('✅ Sesión cerrada correctamente');
+    console.log('---------------------------------------------\n');
   };
 
   const handleNavigate = (newPage, usr = null) => {
-    console.log('🔄 Navegando a:', newPage);
+    console.log('\n🔄 NAVEGACIÓN');
+    console.log('---------------------------------------------');
+    console.log('Navegando a:', newPage);
     setPage(newPage);
+    
     if (usr) {
       setUsuario(usr);
       console.log('✅ Usuario establecido:', usr.nombre);
@@ -641,7 +750,20 @@ export default function App() {
     } else if (newPage === 'registro') {
       window.history.pushState({}, document.title, '/?page=registro');
     }
+    console.log('---------------------------------------------\n');
   };
+
+  // Mostrar loading mientras se verifica la autenticación
+  if (page === 'loading') {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <h2 className="auth-title">Cargando...</h2>
+          <p style={{ textAlign: 'center', color: '#666' }}>Verificando autenticación</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
