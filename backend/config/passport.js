@@ -29,7 +29,7 @@ passport.use(
         let usuario = await Usuario.findOne({ googleId: id });
 
         if (usuario) {
-          console.log('✅ Usuario existente encontrado:', usuario.correo);
+          console.log('Usuario existente encontrado:', usuario.correo);
           return done(null, usuario);
         }
 

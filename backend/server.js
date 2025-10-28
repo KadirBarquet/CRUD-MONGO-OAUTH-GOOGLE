@@ -15,41 +15,51 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+console.log('FRONTEND_URL configurado:', FRONTEND_URL);
+console.log('NODE_ENV:', process.env.NODE_ENV);
+
 // ==================== MIDDLEWARE ====================
 
-// CORS MEJORADO - Acepta múltiples orígenes
-const allowedOrigins = [
-  FRONTEND_URL,
-  'http://localhost:3000',
-  'https://crud-mongo-oauth-google-5vhyvqtxe-kadirbarquets-projects.vercel.app',
-  /\.vercel\.app$/, // Cualquier subdominio de Vercel
-];
-
+// CORS simplificado y permisivo para debugging
 app.use(cors({
   origin: function(origin, callback) {
-    // Permitir requests sin origin (como Postman, curl, etc)
+    // Permitir requests sin origin (Postman, curl)
     if (!origin) return callback(null, true);
     
-    // Verificar si el origin está en la lista
-    const isAllowed = allowedOrigins.some(allowedOrigin => {
-      if (typeof allowedOrigin === 'string') {
-        return allowedOrigin === origin;
-      }
-      // Si es RegExp
-      return allowedOrigin.test(origin);
-    });
+    console.log('Origin recibido:', origin);
     
-    if (isAllowed) {
-      callback(null, true);
-    } else {
-      console.log('Origin no permitido:', origin);
-      callback(new Error('Not allowed by CORS'));
+    // Lista de origenes permitidos
+    const allowed = [
+      'http://localhost:3000',
+      'https://crud-mongo-oauth-google-5vhyvqtxe-kadirbarquets-projects.vercel.app',
+      FRONTEND_URL
+    ];
+    
+    // Permitir cualquier subdominio de vercel.app
+    if (origin.includes('vercel.app') || allowed.includes(origin)) {
+      console.log('Origin permitido:', origin);
+      return callback(null, true);
     }
+    
+    console.log('Origin rechazado:', origin);
+    callback(null, true); // TEMPORAL: permitir todo para debugging
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400, // 24 horas
 }));
+
+// Logging middleware para debugging
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`);
+  console.log('Headers:', {
+    origin: req.headers.origin,
+    authorization: req.headers.authorization ? 'Presente' : 'Ausente',
+  });
+  next();
+});
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -82,6 +92,7 @@ app.get('/', (req, res) => {
     mensaje: 'Servidor Express funcionando!',
     estado: 'Backend listo para MongoDB + JWT + OAuth',
     timestamp: new Date().toISOString(),
+    frontend: FRONTEND_URL,
   });
 });
 
@@ -89,6 +100,8 @@ app.get('/', (req, res) => {
 
 app.post('/registro', async (req, res) => {
   try {
+    console.log('POST /registro - Body:', req.body);
+    
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({
         error: 'No se recibió body en la petición o no es un objeto.',
@@ -126,6 +139,7 @@ app.post('/registro', async (req, res) => {
     });
 
     await nuevoUsuario.save();
+    console.log('Usuario registrado:', correo);
 
     res.status(201).json({
       mensaje: 'Usuario registrado exitosamente',
@@ -155,6 +169,8 @@ app.post('/registro', async (req, res) => {
 
 app.post('/login', async (req, res) => {
   try {
+    console.log('POST /login - Body:', req.body);
+    
     const { correo, contrasenia } = req.body;
 
     if (!correo || !contrasenia) {
@@ -181,6 +197,8 @@ app.post('/login', async (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
+
+    console.log('Login exitoso:', correo);
 
     res.json({
       mensaje: 'Login exitoso',
@@ -212,6 +230,7 @@ app.get(
     failureRedirect: `${FRONTEND_URL}/?error=auth_failed`,
   }),
   (req, res) => {
+    console.log('OAuth callback exitoso');
     const usuario = req.user;
 
     const token = jwt.sign(
@@ -232,7 +251,7 @@ app.get(
       })
     );
 
-    // CORREGIDO: Redirigir a la raíz con parámetros
+    console.log('Redirigiendo a:', `${FRONTEND_URL}/?token=${token.substring(0, 20)}...`);
     res.redirect(`${FRONTEND_URL}/?token=${token}&usuario=${usuarioData}`);
   }
 );
@@ -250,6 +269,8 @@ app.get('/logout', (req, res) => {
 
 app.get('/perfil', verificarToken, async (req, res) => {
   try {
+    console.log('GET /perfil - Usuario:', req.usuarioId);
+    
     const usuario = await Usuario.findById(req.usuarioId).select('-contrasenia');
 
     if (!usuario) {
@@ -268,8 +289,7 @@ app.get('/perfil', verificarToken, async (req, res) => {
 
 app.get('/usuarios', verificarToken, async (req, res) => {
   try {
-    console.log('Solicitando lista de usuarios...');
-    console.log('Usuario autenticado:', req.usuarioId);
+    console.log('GET /usuarios - Usuario autenticado:', req.usuarioId);
 
     const usuarios = await Usuario.find().select(
       'nombre correo fotoPerfil fechaRegistro _id tipoAutenticacion'
@@ -290,6 +310,7 @@ app.get('/usuarios', verificarToken, async (req, res) => {
 app.get('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('GET /usuarios/:id - ID:', id);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -315,6 +336,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, correo, contrasenia } = req.body;
+    console.log('PUT /usuarios/:id - ID:', id, 'Body:', { nombre, correo });
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -353,6 +375,8 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
+    console.log('Usuario actualizado:', usuarioActualizado.correo);
+
     res.json({
       mensaje: 'Usuario actualizado exitosamente',
       usuario: usuarioActualizado,
@@ -378,6 +402,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
 app.post('/usuarios', verificarToken, async (req, res) => {
   try {
     const { nombre, correo, contrasenia } = req.body;
+    console.log('POST /usuarios - Body:', { nombre, correo });
 
     if (!nombre || !correo || !contrasenia) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' });
@@ -408,6 +433,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
     });
 
     await nuevoUsuario.save();
+    console.log('Usuario creado:', correo);
 
     res.status(201).json({
       mensaje: 'Usuario creado exitosamente',
@@ -438,6 +464,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
 app.delete('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('DELETE /usuarios/:id - ID:', id);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -448,6 +475,8 @@ app.delete('/usuarios/:id', verificarToken, async (req, res) => {
     if (!usuarioEliminado) {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
+
+    console.log('Usuario eliminado:', usuarioEliminado.correo);
 
     res.json({
       mensaje: 'Usuario eliminado exitosamente',
@@ -467,12 +496,13 @@ app.delete('/usuarios/:id', verificarToken, async (req, res) => {
 app.listen(PORT, () => {
   console.log(`
 ==============================================
-Servidor corriendo en http://localhost:${PORT}
+Servidor corriendo en puerto ${PORT}
 ==============================================
 - Autenticación JWT activada
 - OAuth Google configurado
 - Backend listo con MongoDB + Seguridad
 - CORS configurado para: ${FRONTEND_URL}
+- Modo: ${process.env.NODE_ENV || 'development'}
 ==============================================
   `);
 });
