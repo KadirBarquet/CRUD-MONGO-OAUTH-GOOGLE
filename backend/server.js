@@ -268,13 +268,11 @@ app.get('/auth/google', (req, res, next) => {
   })(req, res, next);
 });
 
-// Callback de Google - VERSIÓN CON HASH
+// Callback de Google
 app.get('/auth/google/callback',
   (req, res, next) => {
     console.log('\n📥 CALLBACK DE GOOGLE RECIBIDO');
     console.log('Query params:', req.query);
-    console.log('Session ID:', req.sessionID);
-    console.log('Session:', JSON.stringify(req.session, null, 2));
     next();
   },
   passport.authenticate('google', {
@@ -286,51 +284,43 @@ app.get('/auth/google/callback',
     try {
       console.log('\n✅ AUTENTICACIÓN EXITOSA');
       console.log('Usuario autenticado:', req.user?.correo);
-      console.log('Session ID después de auth:', req.sessionID);
-      console.log('Session completa:', JSON.stringify(req.session, null, 2));
       
       const usuario = req.user;
 
       if (!usuario) {
-        console.error('❌ No hay usuario en req.user después de autenticar');
+        console.error('❌ No hay usuario en req.user');
         return res.redirect(`${FRONTEND_URL}/?error=no_user`);
       }
 
       // Generar JWT
       const token = jwt.sign(
-        {
-          usuarioId: usuario._id,
-          correo: usuario.correo,
-        },
+        { usuarioId: usuario._id, correo: usuario.correo },
         process.env.JWT_SECRET,
         { expiresIn: '7d' }
       );
 
-      console.log('✅ JWT generado');
+      // Preparar datos del usuario
+      const usuarioData = encodeURIComponent(
+        JSON.stringify({
+          _id: usuario._id,
+          nombre: usuario.nombre,
+          correo: usuario.correo,
+          fotoPerfil: usuario.fotoPerfil,
+          tipoAutenticacion: usuario.tipoAutenticacion,
+        })
+      );
 
-      // Preparar datos del usuario con Base64 para evitar problemas de encoding
-      const usuarioData = Buffer.from(JSON.stringify({
-        _id: usuario._id,
-        nombre: usuario.nombre,
-        correo: usuario.correo,
-        fotoPerfil: usuario.fotoPerfil,
-        tipoAutenticacion: usuario.tipoAutenticacion,
-      })).toString('base64');
-
-      // USAR HASH (#) en lugar de QUERY PARAMS (?)
-      // Esto evita problemas con proxies y servidores que eliminan query params
-      const redirectUrl = `${FRONTEND_URL}/#/callback?token=${token}&usuario=${usuarioData}`;
+      // Redirigir a /callback.html
+      const redirectUrl = `${FRONTEND_URL}/callback.html?token=${token}&usuario=${usuarioData}`;
       
-      console.log('🔀 Redirigiendo a:', FRONTEND_URL);
+      console.log('🔀 Redirigiendo a: /callback.html');
       console.log('📦 Token incluido:', token.substring(0, 20) + '...');
       console.log('👤 Usuario incluido:', usuario.nombre);
-      console.log('🔗 URL completa:', redirectUrl);
       
       res.redirect(redirectUrl);
     } catch (err) {
       console.error('❌ ERROR EN CALLBACK:', err);
-      console.error('Stack:', err.stack);
-      res.redirect(`${FRONTEND_URL}/?error=callback_error&detail=${encodeURIComponent(err.message)}`);
+      res.redirect(`${FRONTEND_URL}/?error=callback_error`);
     }
   }
 );
