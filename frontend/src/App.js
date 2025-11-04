@@ -7,14 +7,82 @@ const googleAuthUrl = `${apiUrl}/auth/google`;
 console.log('🌐 API URL configurada:', apiUrl);
 console.log('🔐 Google Auth URL:', googleAuthUrl);
 
-// Componente de Login
+// ==================== COMPONENTE CALLBACK ====================
+function CallbackPage({ onNavigate }) {
+  useEffect(() => {
+    console.log('🔄 PÁGINA DE CALLBACK CARGADA');
+    console.log('URL completa:', window.location.href);
+    
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const usuarioParam = params.get('usuario');
+    
+    console.log('Token recibido:', token ? 'SÍ (' + token.substring(0, 20) + '...)' : 'NO');
+    console.log('Usuario recibido:', usuarioParam ? 'SÍ' : 'NO');
+    
+    if (token && usuarioParam) {
+      try {
+        console.log('✅ Procesando datos de OAuth...');
+        
+        // Guardar token
+        localStorage.setItem('token', token);
+        console.log('✅ Token guardado');
+        
+        // Decodificar usuario
+        const usr = JSON.parse(decodeURIComponent(usuarioParam));
+        localStorage.setItem('usuario', JSON.stringify(usr));
+        console.log('✅ Usuario guardado:', usr.nombre);
+        
+        // Redirigir al CRUD
+        console.log('✅ Redirigiendo al CRUD...');
+        setTimeout(() => {
+          onNavigate('crud', usr);
+        }, 500);
+        
+      } catch (err) {
+        console.error('❌ Error procesando callback:', err);
+        setTimeout(() => {
+          onNavigate('login');
+        }, 2000);
+      }
+    } else {
+      console.error('❌ No se recibieron token o usuario');
+      setTimeout(() => {
+        onNavigate('login');
+      }, 2000);
+    }
+  }, [onNavigate]);
+  
+  return (
+    <div className="auth-container">
+      <div className="auth-card">
+        <h2 className="auth-title">Autenticando...</h2>
+        <p style={{ textAlign: 'center', color: '#666' }}>
+          Procesando datos de Google
+        </p>
+        <div style={{ textAlign: 'center', marginTop: '20px' }}>
+          <div className="spinner" style={{
+            border: '4px solid #f3f3f3',
+            borderTop: '4px solid #007bff',
+            borderRadius: '50%',
+            width: '40px',
+            height: '40px',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto'
+          }}></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==================== COMPONENTE LOGIN ====================
 function LoginPage({ onNavigate }) {
   const [formData, setFormData] = useState({ correo: '', contrasenia: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Verificar si hay error en la URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const urlError = params.get('error');
@@ -26,8 +94,6 @@ function LoginPage({ onNavigate }) {
         'callback_error': '❌ Error en el proceso de autenticación.'
       };
       setError(errorMessages[urlError] || '❌ Error desconocido en la autenticación');
-      
-      // Limpiar la URL
       window.history.replaceState({}, document.title, '/');
     }
   }, []);
@@ -74,7 +140,6 @@ function LoginPage({ onNavigate }) {
 
   const handleGoogleLogin = () => {
     console.log('🔐 Iniciando OAuth con:', googleAuthUrl);
-    // Redirigir a Google OAuth
     window.location.href = googleAuthUrl;
   };
 
@@ -161,7 +226,7 @@ function LoginPage({ onNavigate }) {
   );
 }
 
-// Componente de Registro
+// ==================== COMPONENTE REGISTRO ====================
 function RegistroPage({ onNavigate }) {
   const [formData, setFormData] = useState({ nombre: '', correo: '', contrasenia: '' });
   const [error, setError] = useState('');
@@ -290,7 +355,7 @@ function RegistroPage({ onNavigate }) {
   );
 }
 
-// Componente de CRUD
+// ==================== COMPONENTE CRUD ====================
 function CRUDPage({ usuario, onLogout }) {
   const [usuarios, setUsuarios] = useState([]);
   const [showFormulario, setShowFormulario] = useState(false);
@@ -305,10 +370,6 @@ function CRUDPage({ usuario, onLogout }) {
 
   const cargarUsuarios = async () => {
     try {
-      console.log('📋 Cargando usuarios...');
-      console.log('🔑 Token:', token ? 'Presente' : 'No presente');
-      console.log('🌐 URL:', `${apiUrl}/usuarios`);
-
       const response = await fetch(`${apiUrl}/usuarios`, {
         method: 'GET',
         headers: { 
@@ -317,17 +378,12 @@ function CRUDPage({ usuario, onLogout }) {
         }
       });
 
-      console.log('📡 Status:', response.status);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('❌ Error response:', errorData);
         throw new Error(errorData.error || 'Error al cargar usuarios');
       }
 
       const data = await response.json();
-      console.log('✅ Usuarios recibidos:', data.total, 'usuarios');
-      
       setUsuarios(data.usuarios);
       setLoading(false);
       setError('');
@@ -617,172 +673,88 @@ function CRUDPage({ usuario, onLogout }) {
   );
 }
 
-// App principal - VERSIÓN CORREGIDA
+// ==================== APP PRINCIPAL ====================
 export default function App() {
   const [page, setPage] = useState('loading');
   const [usuario, setUsuario] = useState(null);
 
   useEffect(() => {
     console.log('==============================================');
-    console.log('🚀 APP INICIADA - Verificando autenticación');
+    console.log('🚀 APP INICIADA');
+    console.log('URL actual:', window.location.href);
     console.log('==============================================');
     
-    // Función para procesar autenticación
-    const procesarAutenticacion = () => {
-      const params = new URLSearchParams(window.location.search);
-      const token = params.get('token');
-      const usuarioParam = params.get('usuario');
-      const pageParam = params.get('page');
-      const errorParam = params.get('error');
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const usuarioParam = params.get('usuario');
+    const pageParam = params.get('page');
+    const errorParam = params.get('error');
 
-      console.log('📦 URL completa:', window.location.href);
-      console.log('📦 Parámetros detectados:');
-      console.log('  - token:', token ? '✅ Presente (' + token.substring(0, 20) + '...)' : '❌ No presente');
-      console.log('  - usuario:', usuarioParam ? '✅ Presente' : '❌ No presente');
-      console.log('  - page:', pageParam || 'No especificado');
-      console.log('  - error:', errorParam || 'No hay error');
+    // CASO 1: Callback de OAuth con parámetros
+    if (token && usuarioParam) {
+      console.log('📥 Callback detectado con parámetros');
+      setPage('callback');
+      return;
+    }
 
-      // CASO 1: Callback de Google OAuth
-      if (token && usuarioParam) {
-        try {
-          console.log('\n🔐 PROCESANDO CALLBACK DE GOOGLE OAUTH');
-          console.log('---------------------------------------------');
-          
-          // Guardar token
-          localStorage.setItem('token', token);
-          console.log('✅ Token guardado en localStorage');
-          
-          // Decodificar y guardar usuario
-          console.log('📝 Decodificando usuario...');
-          console.log('Raw usuario param:', usuarioParam.substring(0, 100) + '...');
-          
-          const usr = JSON.parse(decodeURIComponent(usuarioParam));
-          localStorage.setItem('usuario', JSON.stringify(usr));
-          console.log('✅ Usuario decodificado y guardado:', usr.nombre, '(' + usr.correo + ')');
-          console.log('✅ Tipo de autenticación:', usr.tipoAutenticacion);
-          console.log('✅ ID del usuario:', usr._id);
-          
-          // Establecer estado
-          setUsuario(usr);
-          setPage('crud');
-          
-          // Limpiar URL
-          console.log('🧹 Limpiando URL...');
-          window.history.replaceState({}, document.title, '/');
-          console.log('✅ URL limpiada');
-          
-          console.log('\n✅ AUTENTICACIÓN OAUTH EXITOSA');
-          console.log('   Mostrando CRUD...');
-          console.log('---------------------------------------------\n');
-          
-          return true; // Autenticación exitosa
-        } catch (err) {
-          console.error('\n❌ ERROR AL PROCESAR CALLBACK OAUTH:', err);
-          console.error('---------------------------------------------');
-          console.error('Nombre del error:', err.name);
-          console.error('Mensaje:', err.message);
-          console.error('Stack:', err.stack);
-          
-          // Intentar guardar aunque sea el token
-          if (token) {
-            console.log('⚠️ Intentando guardar solo el token...');
-            localStorage.setItem('token', token);
-          }
-          
-          localStorage.removeItem('usuario'); // Limpiar usuario corrupto
-          setPage('login');
-          window.history.replaceState({}, document.title, '/?error=parse_error');
-          return false;
-        }
+    // CASO 2: Error en autenticación
+    if (errorParam) {
+      console.log('❌ Error detectado:', errorParam);
+      setPage('login');
+      return;
+    }
+
+    // CASO 3: Sesión guardada
+    const storedToken = localStorage.getItem('token');
+    const storedUsuario = localStorage.getItem('usuario');
+
+    if (storedToken && storedUsuario) {
+      try {
+        const usr = JSON.parse(storedUsuario);
+        console.log('✅ Sesión recuperada:', usr.nombre);
+        setUsuario(usr);
+        setPage('crud');
+        return;
+      } catch (err) {
+        console.error('❌ Error al parsear usuario:', err);
+        localStorage.clear();
       }
+    }
 
-      // CASO 2: Error en autenticación
-      if (errorParam) {
-        console.log('\n❌ ERROR EN AUTENTICACIÓN:', errorParam);
-        setPage('login');
-        return false;
-      }
-
-      // CASO 3: Ya tiene sesión guardada
-      const storedToken = localStorage.getItem('token');
-      const storedUsuario = localStorage.getItem('usuario');
-
-      console.log('\n🔍 Verificando sesión guardada:');
-      console.log('  - Token en localStorage:', storedToken ? '✅ Presente' : '❌ No presente');
-      console.log('  - Usuario en localStorage:', storedUsuario ? '✅ Presente' : '❌ No presente');
-
-      if (storedToken && storedUsuario) {
-        try {
-          const usr = JSON.parse(storedUsuario);
-          setUsuario(usr);
-          setPage('crud');
-          console.log('✅ Sesión recuperada exitosamente:', usr.nombre);
-          console.log('   Mostrando CRUD...\n');
-          return true;
-        } catch (err) {
-          console.error('❌ Error al parsear usuario guardado:', err);
-          localStorage.clear();
-        }
-      }
-
-      // CASO 4: Navegación manual (registro o login)
-      console.log('\n🔄 No hay sesión activa');
-      if (pageParam === 'registro') {
-        console.log('   Mostrando página de REGISTRO\n');
-        setPage('registro');
-      } else {
-        console.log('   Mostrando página de LOGIN\n');
-        setPage('login');
-      }
-      console.log('==============================================\n');
-      
-      return false;
-    };
-
-    // Ejecutar procesamiento
-    procesarAutenticacion();
-  }, []); // Solo ejecutar una vez al montar
+    // CASO 4: Navegación manual
+    if (pageParam === 'registro') {
+      setPage('registro');
+    } else {
+      setPage('login');
+    }
+    
+    console.log('==============================================');
+  }, []);
 
   const handleLogout = () => {
-    console.log('\n👋 CERRANDO SESIÓN');
-    console.log('---------------------------------------------');
     localStorage.removeItem('token');
     localStorage.removeItem('usuario');
-    console.log('✅ Token eliminado');
-    console.log('✅ Usuario eliminado');
     setUsuario(null);
     setPage('login');
     window.history.pushState({}, document.title, '/');
-    console.log('✅ Sesión cerrada correctamente');
-    console.log('---------------------------------------------\n');
   };
 
   const handleNavigate = (newPage, usr = null) => {
-    console.log('\n🔄 NAVEGACIÓN');
-    console.log('---------------------------------------------');
-    console.log('Navegando a:', newPage);
     setPage(newPage);
-    
-    if (usr) {
-      setUsuario(usr);
-      console.log('✅ Usuario establecido:', usr.nombre);
-    }
+    if (usr) setUsuario(usr);
     
     if (newPage === 'login') {
       window.history.pushState({}, document.title, '/');
     } else if (newPage === 'registro') {
       window.history.pushState({}, document.title, '/?page=registro');
     }
-    console.log('---------------------------------------------\n');
   };
 
-  // Mostrar loading mientras se verifica la autenticación
   if (page === 'loading') {
     return (
       <div className="auth-container">
         <div className="auth-card">
           <h2 className="auth-title">Cargando...</h2>
-          <p style={{ textAlign: 'center', color: '#666' }}>Verificando autenticación</p>
         </div>
       </div>
     );
@@ -790,6 +762,7 @@ export default function App() {
 
   return (
     <div>
+      {page === 'callback' && <CallbackPage onNavigate={handleNavigate} />}
       {page === 'login' && <LoginPage onNavigate={handleNavigate} />}
       {page === 'registro' && <RegistroPage onNavigate={handleNavigate} />}
       {page === 'crud' && usuario && (
