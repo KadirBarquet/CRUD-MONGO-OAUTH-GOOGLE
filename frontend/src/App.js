@@ -617,7 +617,7 @@ function CRUDPage({ usuario, onLogout }) {
   );
 }
 
-// App principal - CORREGIDO
+// App principal - VERSIÓN CORREGIDA
 export default function App() {
   const [page, setPage] = useState('loading');
   const [usuario, setUsuario] = useState(null);
@@ -627,98 +627,121 @@ export default function App() {
     console.log('🚀 APP INICIADA - Verificando autenticación');
     console.log('==============================================');
     
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const usuarioParam = params.get('usuario');
-    const pageParam = params.get('page');
-    const errorParam = params.get('error');
+    // Función para procesar autenticación
+    const procesarAutenticacion = () => {
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const usuarioParam = params.get('usuario');
+      const pageParam = params.get('page');
+      const errorParam = params.get('error');
 
-    console.log('📦 Parámetros URL detectados:');
-    console.log('  - token:', token ? '✅ Presente' : '❌ No presente');
-    console.log('  - usuario:', usuarioParam ? '✅ Presente' : '❌ No presente');
-    console.log('  - page:', pageParam || 'No especificado');
-    console.log('  - error:', errorParam || 'No hay error');
+      console.log('📦 URL completa:', window.location.href);
+      console.log('📦 Parámetros detectados:');
+      console.log('  - token:', token ? '✅ Presente (' + token.substring(0, 20) + '...)' : '❌ No presente');
+      console.log('  - usuario:', usuarioParam ? '✅ Presente' : '❌ No presente');
+      console.log('  - page:', pageParam || 'No especificado');
+      console.log('  - error:', errorParam || 'No hay error');
 
-    // CASO 1: Callback de Google OAuth
-    if (token && usuarioParam) {
-      try {
-        console.log('\n🔐 PROCESANDO CALLBACK DE GOOGLE OAUTH');
-        console.log('---------------------------------------------');
-        
-        // Guardar token
-        localStorage.setItem('token', token);
-        console.log('✅ Token guardado en localStorage');
-        
-        // Decodificar y guardar usuario
-        const usr = JSON.parse(decodeURIComponent(usuarioParam));
-        localStorage.setItem('usuario', JSON.stringify(usr));
-        console.log('✅ Usuario guardado:', usr.nombre, '(' + usr.correo + ')');
-        console.log('✅ Tipo de autenticación:', usr.tipoAutenticacion);
-        
-        // Establecer estado
-        setUsuario(usr);
-        setPage('crud');
-        
-        // Limpiar URL para evitar reautenticación
-        window.history.replaceState({}, document.title, '/');
-        console.log('✅ URL limpiada');
-        
-        console.log('\n✅ AUTENTICACIÓN OAUTH EXITOSA');
-        console.log('   Redirigiendo al CRUD...');
-        console.log('---------------------------------------------\n');
-        
-        return; // IMPORTANTE: Salir aquí
-      } catch (err) {
-        console.error('\n❌ ERROR AL PROCESAR CALLBACK OAUTH:', err);
-        console.error('---------------------------------------------');
-        console.error('Detalles del error:', err.message);
-        console.error('Stack:', err.stack);
-        localStorage.clear();
+      // CASO 1: Callback de Google OAuth
+      if (token && usuarioParam) {
+        try {
+          console.log('\n🔐 PROCESANDO CALLBACK DE GOOGLE OAUTH');
+          console.log('---------------------------------------------');
+          
+          // Guardar token
+          localStorage.setItem('token', token);
+          console.log('✅ Token guardado en localStorage');
+          
+          // Decodificar y guardar usuario
+          console.log('📝 Decodificando usuario...');
+          console.log('Raw usuario param:', usuarioParam.substring(0, 100) + '...');
+          
+          const usr = JSON.parse(decodeURIComponent(usuarioParam));
+          localStorage.setItem('usuario', JSON.stringify(usr));
+          console.log('✅ Usuario decodificado y guardado:', usr.nombre, '(' + usr.correo + ')');
+          console.log('✅ Tipo de autenticación:', usr.tipoAutenticacion);
+          console.log('✅ ID del usuario:', usr._id);
+          
+          // Establecer estado
+          setUsuario(usr);
+          setPage('crud');
+          
+          // Limpiar URL
+          console.log('🧹 Limpiando URL...');
+          window.history.replaceState({}, document.title, '/');
+          console.log('✅ URL limpiada');
+          
+          console.log('\n✅ AUTENTICACIÓN OAUTH EXITOSA');
+          console.log('   Mostrando CRUD...');
+          console.log('---------------------------------------------\n');
+          
+          return true; // Autenticación exitosa
+        } catch (err) {
+          console.error('\n❌ ERROR AL PROCESAR CALLBACK OAUTH:', err);
+          console.error('---------------------------------------------');
+          console.error('Nombre del error:', err.name);
+          console.error('Mensaje:', err.message);
+          console.error('Stack:', err.stack);
+          
+          // Intentar guardar aunque sea el token
+          if (token) {
+            console.log('⚠️ Intentando guardar solo el token...');
+            localStorage.setItem('token', token);
+          }
+          
+          localStorage.removeItem('usuario'); // Limpiar usuario corrupto
+          setPage('login');
+          window.history.replaceState({}, document.title, '/?error=parse_error');
+          return false;
+        }
+      }
+
+      // CASO 2: Error en autenticación
+      if (errorParam) {
+        console.log('\n❌ ERROR EN AUTENTICACIÓN:', errorParam);
         setPage('login');
-        return;
+        return false;
       }
-    }
 
-    // CASO 2: Error en autenticación
-    if (errorParam) {
-      console.log('\n❌ ERROR EN AUTENTICACIÓN:', errorParam);
-      setPage('login');
-      return;
-    }
+      // CASO 3: Ya tiene sesión guardada
+      const storedToken = localStorage.getItem('token');
+      const storedUsuario = localStorage.getItem('usuario');
 
-    // CASO 3: Ya tiene sesión guardada
-    const storedToken = localStorage.getItem('token');
-    const storedUsuario = localStorage.getItem('usuario');
+      console.log('\n🔍 Verificando sesión guardada:');
+      console.log('  - Token en localStorage:', storedToken ? '✅ Presente' : '❌ No presente');
+      console.log('  - Usuario en localStorage:', storedUsuario ? '✅ Presente' : '❌ No presente');
 
-    console.log('\n🔍 Verificando sesión guardada:');
-    console.log('  - Token en localStorage:', storedToken ? '✅ Presente' : '❌ No presente');
-    console.log('  - Usuario en localStorage:', storedUsuario ? '✅ Presente' : '❌ No presente');
-
-    if (storedToken && storedUsuario) {
-      try {
-        const usr = JSON.parse(storedUsuario);
-        setUsuario(usr);
-        setPage('crud');
-        console.log('✅ Sesión recuperada exitosamente:', usr.nombre);
-        console.log('   Redirigiendo al CRUD...\n');
-        return;
-      } catch (err) {
-        console.error('❌ Error al parsear usuario guardado:', err);
-        localStorage.clear();
+      if (storedToken && storedUsuario) {
+        try {
+          const usr = JSON.parse(storedUsuario);
+          setUsuario(usr);
+          setPage('crud');
+          console.log('✅ Sesión recuperada exitosamente:', usr.nombre);
+          console.log('   Mostrando CRUD...\n');
+          return true;
+        } catch (err) {
+          console.error('❌ Error al parsear usuario guardado:', err);
+          localStorage.clear();
+        }
       }
-    }
 
-    // CASO 4: Navegación manual (registro o login)
-    console.log('\n🔄 No hay sesión activa');
-    if (pageParam === 'registro') {
-      console.log('   Mostrando página de REGISTRO\n');
-      setPage('registro');
-    } else {
-      console.log('   Mostrando página de LOGIN\n');
-      setPage('login');
-    }
-    console.log('==============================================\n');
-  }, []);
+      // CASO 4: Navegación manual (registro o login)
+      console.log('\n🔄 No hay sesión activa');
+      if (pageParam === 'registro') {
+        console.log('   Mostrando página de REGISTRO\n');
+        setPage('registro');
+      } else {
+        console.log('   Mostrando página de LOGIN\n');
+        setPage('login');
+      }
+      console.log('==============================================\n');
+      
+      return false;
+    };
+
+    // Ejecutar procesamiento
+    procesarAutenticacion();
+  }, []); // Solo ejecutar una vez al montar
 
   const handleLogout = () => {
     console.log('\n👋 CERRANDO SESIÓN');
