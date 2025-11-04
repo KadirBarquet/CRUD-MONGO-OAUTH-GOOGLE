@@ -12,22 +12,8 @@ function CallbackPage({ onNavigate }) {
   useEffect(() => {
     console.log('🔄 PÁGINA DE CALLBACK CARGADA');
     console.log('URL completa:', window.location.href);
-    console.log('Hash:', window.location.hash);
-    console.log('Search:', window.location.search);
     
-    // Intentar leer desde HASH primero (nuevo método)
-    let params;
-    if (window.location.hash.includes('?')) {
-      // Extraer parámetros del hash: #/callback?token=...&usuario=...
-      const hashQuery = window.location.hash.split('?')[1];
-      params = new URLSearchParams(hashQuery);
-      console.log('📍 Leyendo desde HASH');
-    } else {
-      // Fallback: leer desde query params tradicionales
-      params = new URLSearchParams(window.location.search);
-      console.log('📍 Leyendo desde QUERY PARAMS');
-    }
-    
+    const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
     const usuarioParam = params.get('usuario');
     
@@ -42,24 +28,10 @@ function CallbackPage({ onNavigate }) {
         localStorage.setItem('token', token);
         console.log('✅ Token guardado');
         
-        // Decodificar usuario - soportar Base64 y URL encoding
-        let usr;
-        try {
-          // Intentar Base64 primero (nuevo método)
-          const decoded = atob(usuarioParam);
-          usr = JSON.parse(decoded);
-          console.log('✅ Usuario decodificado desde Base64');
-        } catch (e) {
-          // Fallback: URL encoding (método antiguo)
-          usr = JSON.parse(decodeURIComponent(usuarioParam));
-          console.log('✅ Usuario decodificado desde URL encoding');
-        }
-        
+        // Decodificar usuario
+        const usr = JSON.parse(decodeURIComponent(usuarioParam));
         localStorage.setItem('usuario', JSON.stringify(usr));
         console.log('✅ Usuario guardado:', usr.nombre);
-        
-        // Limpiar URL
-        window.history.replaceState({}, document.title, '/');
         
         // Redirigir al CRUD
         console.log('✅ Redirigiendo al CRUD...');
@@ -69,14 +41,12 @@ function CallbackPage({ onNavigate }) {
         
       } catch (err) {
         console.error('❌ Error procesando callback:', err);
-        console.error('Error completo:', err.message, err.stack);
         setTimeout(() => {
           onNavigate('login');
         }, 2000);
       }
     } else {
       console.error('❌ No se recibieron token o usuario');
-      console.error('Params disponibles:', Array.from(params.entries()));
       setTimeout(() => {
         onNavigate('login');
       }, 2000);
@@ -711,30 +681,20 @@ export default function App() {
   useEffect(() => {
     console.log('==============================================');
     console.log('🚀 APP INICIADA');
-    console.log('URL actual:', window.location.href);
     console.log('==============================================');
     
     const params = new URLSearchParams(window.location.search);
-    const token = params.get('token');
-    const usuarioParam = params.get('usuario');
     const pageParam = params.get('page');
     const errorParam = params.get('error');
 
-    // CASO 1: Callback de OAuth con parámetros
-    if (token && usuarioParam) {
-      console.log('📥 Callback detectado con parámetros');
-      setPage('callback');
-      return;
-    }
-
-    // CASO 2: Error en autenticación
+    // CASO 1: Error en autenticación
     if (errorParam) {
       console.log('❌ Error detectado:', errorParam);
       setPage('login');
       return;
     }
 
-    // CASO 3: Sesión guardada
+    // CASO 2: Sesión guardada (después de OAuth)
     const storedToken = localStorage.getItem('token');
     const storedUsuario = localStorage.getItem('usuario');
 
@@ -751,7 +711,7 @@ export default function App() {
       }
     }
 
-    // CASO 4: Navegación manual
+    // CASO 3: Navegación manual
     if (pageParam === 'registro') {
       setPage('registro');
     } else {

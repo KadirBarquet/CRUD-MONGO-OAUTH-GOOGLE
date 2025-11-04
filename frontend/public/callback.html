@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autenticando...</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        h2 { color: #333; margin-bottom: 10px; }
+        p { color: #666; }
+        .error { color: #dc3545; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🔐 Autenticando con Google</h2>
+        <p id="status">Procesando datos...</p>
+        <div class="spinner"></div>
+        <p id="error" class="error" style="display:none;"></p>
+    </div>
+
+    <script>
+        console.log('📍 Callback.html cargado');
+        console.log('URL completa:', window.location.href);
+        
+        // Extraer parámetros de la URL
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get('token');
+        const usuarioParam = params.get('usuario');
+        
+        console.log('Token:', token ? 'Presente (' + token.substring(0, 20) + '...)' : 'NO PRESENTE');
+        console.log('Usuario:', usuarioParam ? 'Presente' : 'NO PRESENTE');
+        
+        const statusEl = document.getElementById('status');
+        const errorEl = document.getElementById('error');
+        
+        if (!token || !usuarioParam) {
+            console.error('❌ Faltan parámetros');
+            statusEl.textContent = 'Error: No se recibieron los datos de autenticación';
+            errorEl.textContent = 'Redirigiendo al login...';
+            errorEl.style.display = 'block';
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 3000);
+        } else {
+            try {
+                console.log('✅ Procesando autenticación...');
+                statusEl.textContent = 'Guardando sesión...';
+                
+                // Guardar en localStorage
+                localStorage.setItem('token', token);
+                console.log('✅ Token guardado');
+                
+                // Decodificar usuario
+                const usuario = JSON.parse(decodeURIComponent(usuarioParam));
+                localStorage.setItem('usuario', JSON.stringify(usuario));
+                console.log('✅ Usuario guardado:', usuario.nombre);
+                
+                statusEl.textContent = '¡Autenticación exitosa!';
+                
+                // Redirigir a la aplicación principal
+                setTimeout(() => {
+                    console.log('✅ Redirigiendo a la app principal');
+                    window.location.href = '/';
+                }, 1000);
+                
+            } catch (err) {
+                console.error('❌ Error:', err);
+                statusEl.textContent = 'Error al procesar datos';
+                errorEl.textContent = err.message;
+                errorEl.style.display = 'block';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 3000);
+            }
+        }
+    </script>
+</body>
+</html>
