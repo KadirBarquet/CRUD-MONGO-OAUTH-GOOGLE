@@ -36,23 +36,23 @@ if (IS_PRODUCTION) {
 
 // CORS CORREGIDO - Específico y con credentials
 app.use(cors({
-  origin: function(origin, callback) {
+  origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:3000',
       'http://localhost:5000',
       FRONTEND_URL,
       process.env.BACKEND_URL
     ].filter(Boolean);
-    
+
     // Permitir requests sin origin (Postman, mobile)
     if (!origin) return callback(null, true);
-    
+
     // Verificar si está permitido
     if (allowedOrigins.some(allowed => origin.includes(allowed.replace('https://', '').replace('http://', '')))) {
       console.log('✅ CORS: Origin permitido:', origin);
       return callback(null, true);
     }
-    
+
     console.log('⚠️ CORS: Origin no permitido:', origin);
     callback(null, true); // Permitir de todas formas en producción para debugging
   },
@@ -88,7 +88,7 @@ app.use(session({
   saveUninitialized: false,
   proxy: IS_PRODUCTION, // IMPORTANTE para Render
   name: 'sessionId', // Nombre personalizado
-  cookie: { 
+  cookie: {
     secure: IS_PRODUCTION, // true en producción (HTTPS)
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 horas
@@ -128,8 +128,8 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
+  res.json({
+    status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     session: req.isAuthenticated ? req.isAuthenticated() : false
@@ -141,7 +141,7 @@ app.get('/health', (req, res) => {
 app.post('/registro', async (req, res) => {
   try {
     console.log('\n📝 POST /registro');
-    
+
     if (!req.body || typeof req.body !== 'object') {
       return res.status(400).json({ error: 'No se recibió body en la petición' });
     }
@@ -202,15 +202,15 @@ app.post('/registro', async (req, res) => {
 app.post('/login', async (req, res) => {
   try {
     console.log('\n🔐 POST /login');
-    
+
     const { correo, contrasenia } = req.body;
 
     if (!correo || !contrasenia) {
       return res.status(400).json({ error: 'Correo y contraseña son requeridos' });
     }
 
-    const usuario = await Usuario.findOne({ 
-      correo: correo.trim().toLowerCase() 
+    const usuario = await Usuario.findOne({
+      correo: correo.trim().toLowerCase()
     }).select('+contrasenia');
 
     if (!usuario) {
@@ -261,7 +261,7 @@ app.get('/auth/google', (req, res, next) => {
   console.log('Origin:', req.headers.origin);
   console.log('Referer:', req.headers.referer);
   console.log('Session ID:', req.sessionID);
-  
+
   passport.authenticate('google', {
     scope: ['profile', 'email'],
     prompt: 'select_account'
@@ -284,7 +284,7 @@ app.get('/auth/google/callback',
     try {
       console.log('\n✅ AUTENTICACIÓN EXITOSA');
       console.log('Usuario autenticado:', req.user?.correo);
-      
+
       const usuario = req.user;
 
       if (!usuario) {
@@ -312,11 +312,11 @@ app.get('/auth/google/callback',
 
       // Redirigir a /callback.html
       const redirectUrl = `${FRONTEND_URL}/callback.html?token=${token}&usuario=${usuarioData}`;
-      
+
       console.log('🔀 Redirigiendo a: /callback.html');
       console.log('📦 Token incluido:', token.substring(0, 20) + '...');
       console.log('👤 Usuario incluido:', usuario.nombre);
-      
+
       res.redirect(redirectUrl);
     } catch (err) {
       console.error('❌ ERROR EN CALLBACK:', err);
@@ -347,7 +347,7 @@ app.get('/logout', (req, res) => {
 app.get('/perfil', verificarToken, async (req, res) => {
   try {
     console.log('\n👤 GET /perfil - Usuario:', req.usuarioId);
-    
+
     const usuario = await Usuario.findById(req.usuarioId).select('-contrasenia');
 
     if (!usuario) {
@@ -420,7 +420,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
     }
 
     const dataActualizar = {};
-    
+
     if (nombre) {
       if (typeof nombre !== 'string' || nombre.trim().length < 2) {
         return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
@@ -566,7 +566,7 @@ app.delete('/usuarios/:id', verificarToken, async (req, res) => {
 
 app.use((req, res) => {
   console.log('❌ 404 - Ruta no encontrada:', req.path);
-  res.status(404).json({ 
+  res.status(404).json({
     error: 'Ruta no encontrada',
     path: req.path,
     method: req.method
@@ -575,9 +575,9 @@ app.use((req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('❌ Error global:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Error interno del servidor',
-    mensaje: err.message 
+    mensaje: err.message
   });
 });
 
