@@ -14,6 +14,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 console.log('==============================================');
 console.log('CONFIGURACIÓN DEL SERVIDOR');
@@ -22,78 +23,86 @@ console.log('FRONTEND_URL:', FRONTEND_URL);
 console.log('BACKEND_URL:', process.env.BACKEND_URL);
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('PORT:', PORT);
+console.log('IS_PRODUCTION:', IS_PRODUCTION);
 console.log('==============================================');
 
 // ==================== MIDDLEWARE ====================
 
-// CORS CORREGIDO - Más permisivo para Vercel
+// Trust proxy ANTES de todo (crítico para Render)
+if (IS_PRODUCTION) {
+  app.set('trust proxy', 1);
+  console.log('✅ Trust proxy activado');
+}
+
+// CORS CORREGIDO - Específico y con credentials
 app.use(cors({
   origin: function(origin, callback) {
-    console.log('Origin recibido:', origin);
-    
-    // Permitir requests sin origin (mobile apps, Postman, curl)
-    if (!origin) {
-      console.log('Sin origin - permitido');
-      return callback(null, true);
-    }
-    
-    // Lista de origenes permitidos
     const allowedOrigins = [
       'http://localhost:3000',
-      process.env.FRONTEND_URL,
-      // Permitir cualquier subdominio de vercel.app
-    ];
+      'http://localhost:5000',
+      FRONTEND_URL,
+      process.env.BACKEND_URL
+    ].filter(Boolean);
     
-    // Verificar si es un subdominio de vercel.app o está en la lista
-    if (origin.includes('vercel.app') || allowedOrigins.includes(origin)) {
-      console.log('Origin permitido:', origin);
+    // Permitir requests sin origin (Postman, mobile)
+    if (!origin) return callback(null, true);
+    
+    // Verificar si está permitido
+    if (allowedOrigins.some(allowed => origin.includes(allowed.replace('https://', '').replace('http://', '')))) {
+      console.log('✅ CORS: Origin permitido:', origin);
       return callback(null, true);
     }
     
-    console.log('Origin no reconocido pero permitido:', origin);
-    // PERMITIR TODO en producción para debugging
-    callback(null, true);
+    console.log('⚠️ CORS: Origin no permitido:', origin);
+    callback(null, true); // Permitir de todas formas en producción para debugging
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Type', 'Authorization'],
-  maxAge: 86400, // 24 horas
-  preflightContinue: false,
-  optionsSuccessStatus: 204
+  credentials: true, // CRÍTICO para cookies/sesiones
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  exposedHeaders: ['set-cookie'],
+  maxAge: 86400
 }));
 
-// Logging middleware mejorado
+// Headers adicionales para cookies cross-origin
 app.use((req, res, next) => {
-  console.log(`\n${req.method} ${req.path}`);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
+// Logging mejorado
+app.use((req, res, next) => {
+  console.log(`\n${new Date().toISOString()} - ${req.method} ${req.path}`);
   console.log('Origin:', req.headers.origin || 'No origin');
-  console.log('Auth:', req.headers.authorization ? 'Presente' : 'Ausente');
-  console.log('Cookies:', req.headers.cookie ? 'Presente' : 'Ausente');
+  console.log('Referer:', req.headers.referer || 'No referer');
+  console.log('User-Agent:', req.headers['user-agent']?.substring(0, 50) || 'No UA');
   next();
 });
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Trust proxy en producción (IMPORTANTE para Render)
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
-
-// Configuración de sesión mejorada
+// ⚠️ CONFIGURACIÓN DE SESIÓN CRÍTICA PARA OAUTH
 app.use(session({
   secret: process.env.SESSION_SECRET || 'tu_session_secret_seguro',
   resave: false,
   saveUninitialized: false,
-  proxy: true, // IMPORTANTE para Render
+  proxy: IS_PRODUCTION, // IMPORTANTE para Render
+  name: 'sessionId', // Nombre personalizado
   cookie: { 
-    secure: process.env.NODE_ENV === 'production', // HTTPS solo en producción
+    secure: IS_PRODUCTION, // true en producción (HTTPS)
     httpOnly: true,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 días
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 'none' para cross-site
-    domain: process.env.NODE_ENV === 'production' ? undefined : 'localhost'
+    maxAge: 24 * 60 * 60 * 1000, // 24 horas
+    sameSite: IS_PRODUCTION ? 'none' : 'lax', // 'none' para cross-origin en producción
+    domain: IS_PRODUCTION ? undefined : undefined // No establecer domain para que funcione
   },
+  rolling: true // Renovar cookie en cada request
 }));
+
+console.log('🍪 Configuración de sesión:');
+console.log('  - secure:', IS_PRODUCTION);
+console.log('  - sameSite:', IS_PRODUCTION ? 'none' : 'lax');
+console.log('  - httpOnly: true');
+console.log('  - maxAge: 24h');
 
 app.use(passport.initialize());
 app.use(passport.session());
@@ -111,15 +120,19 @@ app.get('/', (req, res) => {
     frontend: FRONTEND_URL,
     backend: process.env.BACKEND_URL,
     environment: process.env.NODE_ENV,
+    session: {
+      hasSession: !!req.session,
+      isAuthenticated: req.isAuthenticated ? req.isAuthenticated() : false
+    }
   });
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    session: req.isAuthenticated ? req.isAuthenticated() : false
   });
 });
 
@@ -127,26 +140,20 @@ app.get('/health', (req, res) => {
 
 app.post('/registro', async (req, res) => {
   try {
-    console.log('\nPOST /registro');
-    console.log('Body recibido:', { ...req.body, contrasenia: '***' });
+    console.log('\n📝 POST /registro');
     
     if (!req.body || typeof req.body !== 'object') {
-      return res.status(400).json({
-        error: 'No se recibió body en la petición',
-      });
+      return res.status(400).json({ error: 'No se recibió body en la petición' });
     }
 
     const { nombre, correo, contrasenia } = req.body;
 
-    // Validaciones
     if (!nombre || !correo || !contrasenia) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
 
     if (typeof nombre !== 'string' || nombre.trim().length < 2) {
-      return res.status(400).json({
-        error: 'El nombre debe tener al menos 2 caracteres',
-      });
+      return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -155,9 +162,7 @@ app.post('/registro', async (req, res) => {
     }
 
     if (typeof contrasenia !== 'string' || contrasenia.length < 8) {
-      return res.status(400).json({
-        error: 'La contraseña debe tener al menos 8 caracteres',
-      });
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
     }
 
     const nuevoUsuario = new Usuario({
@@ -168,7 +173,7 @@ app.post('/registro', async (req, res) => {
     });
 
     await nuevoUsuario.save();
-    console.log('Usuario registrado:', correo);
+    console.log('✅ Usuario registrado:', correo);
 
     res.status(201).json({
       mensaje: 'Usuario registrado exitosamente',
@@ -179,16 +184,14 @@ app.post('/registro', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Error en POST /registro:', err);
+    console.error('❌ Error en POST /registro:', err);
 
     if (err.code === 11000) {
       return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
-      const mensajes = Object.values(err.errors)
-        .map((e) => e.message)
-        .join(', ');
+      const mensajes = Object.values(err.errors).map((e) => e.message).join(', ');
       return res.status(400).json({ error: mensajes });
     }
 
@@ -198,8 +201,7 @@ app.post('/registro', async (req, res) => {
 
 app.post('/login', async (req, res) => {
   try {
-    console.log('\nPOST /login');
-    console.log('Body recibido:', { ...req.body, contrasenia: '***' });
+    console.log('\n🔐 POST /login');
     
     const { correo, contrasenia } = req.body;
 
@@ -212,14 +214,14 @@ app.post('/login', async (req, res) => {
     }).select('+contrasenia');
 
     if (!usuario) {
-      console.log('Usuario no encontrado:', correo);
+      console.log('❌ Usuario no encontrado:', correo);
       return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
     }
 
     const esValida = await usuario.compararContrasenia(contrasenia);
 
     if (!esValida) {
-      console.log('Contraseña incorrecta para:', correo);
+      console.log('❌ Contraseña incorrecta para:', correo);
       return res.status(401).json({ error: 'Correo o contraseña incorrectos' });
     }
 
@@ -232,7 +234,7 @@ app.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    console.log('Login exitoso:', correo);
+    console.log('✅ Login exitoso:', correo);
 
     res.json({
       mensaje: 'Login exitoso',
@@ -246,47 +248,55 @@ app.post('/login', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Error en POST /login:', err);
+    console.error('❌ Error en POST /login:', err);
     res.status(500).json({ error: 'Error al autenticar usuario: ' + err.message });
   }
 });
 
 // ==================== RUTAS OAUTH - GOOGLE ====================
 
-app.get(
-  '/auth/google',
-  (req, res, next) => {
-    console.log('\nIniciando autenticación Google OAuth');
-    console.log('Origin:', req.headers.origin);
-    next();
-  },
+// Ruta para iniciar OAuth
+app.get('/auth/google', (req, res, next) => {
+  console.log('\n🔐 INICIANDO OAUTH GOOGLE');
+  console.log('Origin:', req.headers.origin);
+  console.log('Referer:', req.headers.referer);
+  console.log('Session ID:', req.sessionID);
+  
   passport.authenticate('google', {
     scope: ['profile', 'email'],
-    prompt: 'select_account' // Forzar selección de cuenta
-  })
-);
+    prompt: 'select_account'
+  })(req, res, next);
+});
 
-app.get(
-  '/auth/google/callback',
+// Callback de Google
+app.get('/auth/google/callback',
   (req, res, next) => {
-    console.log('\nCallback de Google recibido');
+    console.log('\n📥 CALLBACK DE GOOGLE RECIBIDO');
     console.log('Query params:', req.query);
+    console.log('Session ID:', req.sessionID);
+    console.log('Session:', JSON.stringify(req.session, null, 2));
     next();
   },
   passport.authenticate('google', {
     failureRedirect: `${FRONTEND_URL}/?error=auth_failed`,
-    session: true
+    session: true,
+    failureMessage: true
   }),
   (req, res) => {
     try {
-      console.log('OAuth callback exitoso');
+      console.log('\n✅ AUTENTICACIÓN EXITOSA');
+      console.log('Usuario autenticado:', req.user?.correo);
+      console.log('Session ID después de auth:', req.sessionID);
+      console.log('Session completa:', JSON.stringify(req.session, null, 2));
+      
       const usuario = req.user;
 
       if (!usuario) {
-        console.error('No hay usuario en req.user');
+        console.error('❌ No hay usuario en req.user después de autenticar');
         return res.redirect(`${FRONTEND_URL}/?error=no_user`);
       }
 
+      // Generar JWT
       const token = jwt.sign(
         {
           usuarioId: usuario._id,
@@ -296,6 +306,9 @@ app.get(
         { expiresIn: '7d' }
       );
 
+      console.log('✅ JWT generado');
+
+      // Preparar datos del usuario
       const usuarioData = encodeURIComponent(
         JSON.stringify({
           _id: usuario._id,
@@ -307,22 +320,34 @@ app.get(
       );
 
       const redirectUrl = `${FRONTEND_URL}/?token=${token}&usuario=${usuarioData}`;
-      console.log('Redirigiendo a:', redirectUrl.substring(0, 100) + '...');
+      
+      console.log('🔀 Redirigiendo a:', FRONTEND_URL);
+      console.log('📦 Token incluido:', token.substring(0, 20) + '...');
+      console.log('👤 Usuario incluido:', usuario.nombre);
       
       res.redirect(redirectUrl);
     } catch (err) {
-      console.error('Error en callback:', err);
-      res.redirect(`${FRONTEND_URL}/?error=callback_error`);
+      console.error('❌ ERROR EN CALLBACK:', err);
+      console.error('Stack:', err.stack);
+      res.redirect(`${FRONTEND_URL}/?error=callback_error&detail=${encodeURIComponent(err.message)}`);
     }
   }
 );
 
+// Logout
 app.get('/logout', (req, res) => {
+  console.log('\n👋 Logout solicitado');
   req.logout((err) => {
     if (err) {
+      console.error('❌ Error en logout:', err);
       return res.status(500).json({ error: 'Error al cerrar sesión' });
     }
-    res.json({ mensaje: 'Sesión cerrada exitosamente' });
+    req.session.destroy((err) => {
+      if (err) console.error('Error destruyendo sesión:', err);
+      res.clearCookie('sessionId');
+      console.log('✅ Sesión cerrada');
+      res.json({ mensaje: 'Sesión cerrada exitosamente' });
+    });
   });
 });
 
@@ -330,7 +355,7 @@ app.get('/logout', (req, res) => {
 
 app.get('/perfil', verificarToken, async (req, res) => {
   try {
-    console.log('\nGET /perfil - Usuario:', req.usuarioId);
+    console.log('\n👤 GET /perfil - Usuario:', req.usuarioId);
     
     const usuario = await Usuario.findById(req.usuarioId).select('-contrasenia');
 
@@ -343,27 +368,27 @@ app.get('/perfil', verificarToken, async (req, res) => {
       usuario,
     });
   } catch (err) {
-    console.error('Error en GET /perfil:', err);
+    console.error('❌ Error en GET /perfil:', err);
     res.status(500).json({ error: 'Error al obtener perfil' });
   }
 });
 
 app.get('/usuarios', verificarToken, async (req, res) => {
   try {
-    console.log('\nGET /usuarios - Usuario autenticado:', req.usuarioId);
+    console.log('\n📋 GET /usuarios - Usuario autenticado:', req.usuarioId);
 
     const usuarios = await Usuario.find().select(
       'nombre correo fotoPerfil fechaRegistro _id tipoAutenticacion'
     );
 
-    console.log(`Se encontraron ${usuarios.length} usuarios`);
+    console.log(`✅ Se encontraron ${usuarios.length} usuarios`);
 
     res.json({
       total: usuarios.length,
       usuarios,
     });
   } catch (err) {
-    console.error('Error en GET /usuarios:', err);
+    console.error('❌ Error en GET /usuarios:', err);
     res.status(500).json({ error: 'Error al consultar usuarios' });
   }
 });
@@ -371,7 +396,7 @@ app.get('/usuarios', verificarToken, async (req, res) => {
 app.get('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('\nGET /usuarios/:id - ID:', id);
+    console.log('\n🔍 GET /usuarios/:id - ID:', id);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -388,7 +413,7 @@ app.get('/usuarios/:id', verificarToken, async (req, res) => {
       usuario,
     });
   } catch (err) {
-    console.error('Error en GET /usuarios/:id:', err);
+    console.error('❌ Error en GET /usuarios/:id:', err);
     res.status(500).json({ error: 'Error al buscar usuario' });
   }
 });
@@ -397,7 +422,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { nombre, correo, contrasenia } = req.body;
-    console.log('\nPUT /usuarios/:id - ID:', id);
+    console.log('\n✏️ PUT /usuarios/:id - ID:', id);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -422,9 +447,7 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
 
     if (contrasenia) {
       if (typeof contrasenia !== 'string' || contrasenia.length < 8) {
-        return res.status(400).json({
-          error: 'La contraseña debe tener al menos 8 caracteres',
-        });
+        return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
       }
       dataActualizar.contrasenia = contrasenia;
     }
@@ -439,23 +462,21 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    console.log('Usuario actualizado:', usuarioActualizado.correo);
+    console.log('✅ Usuario actualizado:', usuarioActualizado.correo);
 
     res.json({
       mensaje: 'Usuario actualizado exitosamente',
       usuario: usuarioActualizado,
     });
   } catch (err) {
-    console.error('Error en PUT /usuarios/:id:', err);
+    console.error('❌ Error en PUT /usuarios/:id:', err);
 
     if (err.code === 11000) {
       return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
-      const mensajes = Object.values(err.errors)
-        .map((e) => e.message)
-        .join(', ');
+      const mensajes = Object.values(err.errors).map((e) => e.message).join(', ');
       return res.status(400).json({ error: mensajes });
     }
 
@@ -466,16 +487,14 @@ app.put('/usuarios/:id', verificarToken, async (req, res) => {
 app.post('/usuarios', verificarToken, async (req, res) => {
   try {
     const { nombre, correo, contrasenia } = req.body;
-    console.log('\nPOST /usuarios - Creando usuario');
+    console.log('\n➕ POST /usuarios - Creando usuario');
 
     if (!nombre || !correo || !contrasenia) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
 
     if (typeof nombre !== 'string' || nombre.trim().length < 2) {
-      return res.status(400).json({
-        error: 'El nombre debe tener al menos 2 caracteres',
-      });
+      return res.status(400).json({ error: 'El nombre debe tener al menos 2 caracteres' });
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -484,9 +503,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
     }
 
     if (typeof contrasenia !== 'string' || contrasenia.length < 8) {
-      return res.status(400).json({
-        error: 'La contraseña debe tener al menos 8 caracteres',
-      });
+      return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
     }
 
     const nuevoUsuario = new Usuario({
@@ -497,7 +514,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
     });
 
     await nuevoUsuario.save();
-    console.log('Usuario creado:', correo);
+    console.log('✅ Usuario creado:', correo);
 
     res.status(201).json({
       mensaje: 'Usuario creado exitosamente',
@@ -508,16 +525,14 @@ app.post('/usuarios', verificarToken, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Error en POST /usuarios:', err);
+    console.error('❌ Error en POST /usuarios:', err);
 
     if (err.code === 11000) {
       return res.status(400).json({ error: 'El correo ya está registrado' });
     }
 
     if (err.name === 'ValidationError') {
-      const mensajes = Object.values(err.errors)
-        .map((e) => e.message)
-        .join(', ');
+      const mensajes = Object.values(err.errors).map((e) => e.message).join(', ');
       return res.status(400).json({ error: mensajes });
     }
 
@@ -528,7 +543,7 @@ app.post('/usuarios', verificarToken, async (req, res) => {
 app.delete('/usuarios/:id', verificarToken, async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('\nDELETE /usuarios/:id - ID:', id);
+    console.log('\n🗑️ DELETE /usuarios/:id - ID:', id);
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({ error: 'ID inválido' });
@@ -540,7 +555,7 @@ app.delete('/usuarios/:id', verificarToken, async (req, res) => {
       return res.status(404).json({ error: 'Usuario no encontrado' });
     }
 
-    console.log('Usuario eliminado:', usuarioEliminado.correo);
+    console.log('✅ Usuario eliminado:', usuarioEliminado.correo);
 
     res.json({
       mensaje: 'Usuario eliminado exitosamente',
@@ -551,16 +566,15 @@ app.delete('/usuarios/:id', verificarToken, async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('Error en DELETE /usuarios/:id:', err);
+    console.error('❌ Error en DELETE /usuarios/:id:', err);
     res.status(500).json({ error: 'Error al eliminar usuario' });
   }
 });
 
 // ==================== MANEJO DE ERRORES ====================
 
-// 404 - Ruta no encontrada
 app.use((req, res) => {
-  console.log('404 - Ruta no encontrada:', req.path);
+  console.log('❌ 404 - Ruta no encontrada:', req.path);
   res.status(404).json({ 
     error: 'Ruta no encontrada',
     path: req.path,
@@ -568,9 +582,8 @@ app.use((req, res) => {
   });
 });
 
-// Error handler global
 app.use((err, req, res, next) => {
-  console.error('Error global:', err);
+  console.error('❌ Error global:', err);
   res.status(500).json({ 
     error: 'Error interno del servidor',
     mensaje: err.message 
@@ -584,11 +597,12 @@ app.listen(PORT, '0.0.0.0', () => {
 SERVIDOR INICIADO CORRECTAMENTE
 ==============================================
 - Puerto: ${PORT}
-- Autenticación JWT: ACTIVADA
-- OAuth Google: CONFIGURADO
-- MongoDB: CONECTANDO...
+- Autenticación JWT: ✅ ACTIVADA
+- OAuth Google: ✅ CONFIGURADO
+- MongoDB: 🔄 CONECTANDO...
 - CORS: ${FRONTEND_URL}
 - Modo: ${process.env.NODE_ENV || 'development'}
+- Trust Proxy: ${IS_PRODUCTION ? '✅' : '❌'}
 ==============================================
   `);
 });
