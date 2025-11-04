@@ -12,8 +12,22 @@ function CallbackPage({ onNavigate }) {
   useEffect(() => {
     console.log('🔄 PÁGINA DE CALLBACK CARGADA');
     console.log('URL completa:', window.location.href);
+    console.log('Hash:', window.location.hash);
+    console.log('Search:', window.location.search);
     
-    const params = new URLSearchParams(window.location.search);
+    // Intentar leer desde HASH primero (nuevo método)
+    let params;
+    if (window.location.hash.includes('?')) {
+      // Extraer parámetros del hash: #/callback?token=...&usuario=...
+      const hashQuery = window.location.hash.split('?')[1];
+      params = new URLSearchParams(hashQuery);
+      console.log('📍 Leyendo desde HASH');
+    } else {
+      // Fallback: leer desde query params tradicionales
+      params = new URLSearchParams(window.location.search);
+      console.log('📍 Leyendo desde QUERY PARAMS');
+    }
+    
     const token = params.get('token');
     const usuarioParam = params.get('usuario');
     
@@ -28,10 +42,24 @@ function CallbackPage({ onNavigate }) {
         localStorage.setItem('token', token);
         console.log('✅ Token guardado');
         
-        // Decodificar usuario
-        const usr = JSON.parse(decodeURIComponent(usuarioParam));
+        // Decodificar usuario - soportar Base64 y URL encoding
+        let usr;
+        try {
+          // Intentar Base64 primero (nuevo método)
+          const decoded = atob(usuarioParam);
+          usr = JSON.parse(decoded);
+          console.log('✅ Usuario decodificado desde Base64');
+        } catch (e) {
+          // Fallback: URL encoding (método antiguo)
+          usr = JSON.parse(decodeURIComponent(usuarioParam));
+          console.log('✅ Usuario decodificado desde URL encoding');
+        }
+        
         localStorage.setItem('usuario', JSON.stringify(usr));
         console.log('✅ Usuario guardado:', usr.nombre);
+        
+        // Limpiar URL
+        window.history.replaceState({}, document.title, '/');
         
         // Redirigir al CRUD
         console.log('✅ Redirigiendo al CRUD...');
@@ -41,12 +69,14 @@ function CallbackPage({ onNavigate }) {
         
       } catch (err) {
         console.error('❌ Error procesando callback:', err);
+        console.error('Error completo:', err.message, err.stack);
         setTimeout(() => {
           onNavigate('login');
         }, 2000);
       }
     } else {
       console.error('❌ No se recibieron token o usuario');
+      console.error('Params disponibles:', Array.from(params.entries()));
       setTimeout(() => {
         onNavigate('login');
       }, 2000);

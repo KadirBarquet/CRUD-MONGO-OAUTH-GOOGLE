@@ -268,7 +268,7 @@ app.get('/auth/google', (req, res, next) => {
   })(req, res, next);
 });
 
-// Callback de Google
+// Callback de Google - VERSIÓN CON HASH
 app.get('/auth/google/callback',
   (req, res, next) => {
     console.log('\n📥 CALLBACK DE GOOGLE RECIBIDO');
@@ -308,22 +308,23 @@ app.get('/auth/google/callback',
 
       console.log('✅ JWT generado');
 
-      // Preparar datos del usuario
-      const usuarioData = encodeURIComponent(
-        JSON.stringify({
-          _id: usuario._id,
-          nombre: usuario.nombre,
-          correo: usuario.correo,
-          fotoPerfil: usuario.fotoPerfil,
-          tipoAutenticacion: usuario.tipoAutenticacion,
-        })
-      );
+      // Preparar datos del usuario con Base64 para evitar problemas de encoding
+      const usuarioData = Buffer.from(JSON.stringify({
+        _id: usuario._id,
+        nombre: usuario.nombre,
+        correo: usuario.correo,
+        fotoPerfil: usuario.fotoPerfil,
+        tipoAutenticacion: usuario.tipoAutenticacion,
+      })).toString('base64');
 
-      const redirectUrl = `${FRONTEND_URL}/?token=${token}&usuario=${usuarioData}`;
+      // USAR HASH (#) en lugar de QUERY PARAMS (?)
+      // Esto evita problemas con proxies y servidores que eliminan query params
+      const redirectUrl = `${FRONTEND_URL}/#/callback?token=${token}&usuario=${usuarioData}`;
       
       console.log('🔀 Redirigiendo a:', FRONTEND_URL);
       console.log('📦 Token incluido:', token.substring(0, 20) + '...');
       console.log('👤 Usuario incluido:', usuario.nombre);
+      console.log('🔗 URL completa:', redirectUrl);
       
       res.redirect(redirectUrl);
     } catch (err) {
